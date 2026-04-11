@@ -1,0 +1,11 @@
+target/
+*/target/
+mysql-data/
+postgres-data/
+.git/
+.gitignore
+.idea/
+*.iml
+*.log
+docker/
+monitoring/

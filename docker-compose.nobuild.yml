@@ -1,7 +1,5 @@
 version: '3.8'
-
-# Infrastructure-only compose — run without building app services
-# Usage: docker compose -f docker-compose.nobuild.yml up -d
+# run services manual
 
 networks:
   neki-network:
