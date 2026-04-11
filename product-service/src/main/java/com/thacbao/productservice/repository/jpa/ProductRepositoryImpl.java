@@ -46,6 +46,16 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
             builder.and(product.isActive.isTrue());
         }
 
+        // Keyword search (DB fallback for when ES is unavailable)
+        if (filter.getKeyword() != null && !filter.getKeyword().isBlank()) {
+            String kw = "%" + filter.getKeyword().toLowerCase() + "%";
+            builder.and(
+                    product.name.lower().like(kw)
+                            .or(product.excerpt.lower().like(kw))
+                            .or(product.description.lower().like(kw))
+            );
+        }
+
         if (filter.getCategoryId() != null) {
             builder.and(subCategory.category.id.eq(filter.getCategoryId()));
         }
