@@ -1,0 +1,95 @@
+# Prometheus configuration for Neki Microservice architecture
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    project: 'neki-ecommerce'
+
+scrape_configs:
+
+  # ===== Application Services =====
+
+  - job_name: 'service-registry'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8761']
+        labels:
+          service: 'service-registry'
+          env: 'local'
+
+  - job_name: 'api-gateway'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+        labels:
+          service: 'api-gateway'
+          env: 'local'
+
+  - job_name: 'user-service'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8081']
+        labels:
+          service: 'user-service'
+          env: 'local'
+
+  - job_name: 'product-service'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8082']
+        labels:
+          service: 'product-service'
+          env: 'local'
+
+  - job_name: 'order-service'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8083']
+        labels:
+          service: 'order-service'
+          env: 'local'
+
+  - job_name: 'payment-service'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8084']
+        labels:
+          service: 'payment-service'
+          env: 'local'
+
+  - job_name: 'recommendation-service'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8085']
+        labels:
+          service: 'recommendation-service'
+          env: 'local'
+
+  - job_name: 'notification-service'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8086']
+        labels:
+          service: 'notification-service'
+          env: 'local'
+
+  # ===== Infrastructure =====
+
+  - job_name: 'node-exporter'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'host-machine'
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

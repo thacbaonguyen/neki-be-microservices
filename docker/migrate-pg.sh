@@ -86,4 +86,4 @@ echo "▶ Cleaning up..."
 rm -f /tmp/product_similarity.tsv /tmp/payment_methods.tsv /tmp/payments.tsv
 docker exec -i neki-postgres rm -f /tmp/product_similarity.tsv /tmp/payment_methods.tsv /tmp/payments.tsv
 
-echo "✅ PostgreSQL Data Migration Complete!"
+echo " PostgreSQL Data Migration Complete!"
