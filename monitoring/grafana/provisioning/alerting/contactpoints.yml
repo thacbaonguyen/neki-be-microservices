@@ -1,0 +1,67 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: email-alerts
+    receivers:
+      - uid: email-receiver
+        type: email
+        settings:
+          addresses: "$ALERT_EMAIL"
+          singleEmail: true
+        disableResolveMessage: false
+
+  - orgId: 1
+    name: telegram-alerts
+    receivers:
+      - uid: telegram-receiver
+        type: telegram
+        settings:
+          bottoken: '${TELEGRAM_BOT_TOKEN}'
+          chatid: "5261128928"
+          message: |
+            *Neki Microservice Alert*
+
+            *{{ .CommonLabels.alertname }}*
+            Status: {{ .Status }}
+            Service: {{ .CommonLabels.service }}
+
+            {{ range .Alerts }}
+            {{ .Annotations.summary }}
+            {{ end }}
+        disableResolveMessage: false
+
+  - orgId: 1
+    name: all-channels
+    receivers:
+      - uid: email-receiver-all
+        type: email
+        settings:
+          addresses: "$ALERT_EMAIL"
+          singleEmail: true
+      - uid: telegram-receiver-all
+        type: telegram
+        settings:
+          bottoken: '${TELEGRAM_BOT_TOKEN}'
+          chatid: "5261128928"
+          message: |
+            *Neki Microservice Alert*
+
+            *{{ .CommonLabels.alertname }}*
+            Status: {{ .Status }}
+            Service: {{ .CommonLabels.service }}
+
+            {{ range .Alerts }}
+            {{ .Annotations.summary }}
+            {{ end }}
+        disableResolveMessage: false
+
+policies:
+  - orgId: 1
+    receiver: all-channels
+    group_by:
+      - grafana_folder
+      - alertname
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

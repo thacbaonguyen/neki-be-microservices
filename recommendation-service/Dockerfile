@@ -15,7 +15,7 @@ COPY notification-service/pom.xml ./notification-service/pom.xml
 COPY common-lib/src ./common-lib/src
 COPY recommendation-service/src ./recommendation-service/src
 
-RUN mvn clean package -pl recommendation-service -am -DskipTests
+RUN mvn clean package -pl recommendation-service -am -Dmaven.test.skip=true
 
 FROM amazoncorretto:21-alpine3.21-jdk
 WORKDIR /app
