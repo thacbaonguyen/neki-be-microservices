@@ -112,7 +112,7 @@ class PaymentServiceImplTest {
         when(data.getOrderCode()).thenReturn(1L);
         when(data.getCode()).thenReturn("00");
         when(data.getReference()).thenReturn("TXN123");
-        when(paymentRepository.findByOrderNumber("1")).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderId(1)).thenReturn(Optional.of(payment));
         when(paymentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         paymentService.handlePayOSWebhook(data);
@@ -126,7 +126,7 @@ class PaymentServiceImplTest {
         WebhookData data = mock(WebhookData.class);
         when(data.getOrderCode()).thenReturn(1L);
         when(data.getCode()).thenReturn("99");
-        when(paymentRepository.findByOrderNumber("1")).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderId(1)).thenReturn(Optional.of(payment));
         when(paymentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         paymentService.handlePayOSWebhook(data);
@@ -139,7 +139,7 @@ class PaymentServiceImplTest {
     void handlePayOSWebhook_paymentNotFound_throws() {
         WebhookData data = mock(WebhookData.class);
         when(data.getOrderCode()).thenReturn(999L);
-        when(paymentRepository.findByOrderNumber("999")).thenReturn(Optional.empty());
+        when(paymentRepository.findByOrderId(999)).thenReturn(Optional.empty());
 
         assertThrows(NotFoundException.class, () -> paymentService.handlePayOSWebhook(data));
     }
@@ -147,7 +147,7 @@ class PaymentServiceImplTest {
     @Test
     void confirmPayment_success() throws Exception {
         payment.setOrderNumber("100001");
-        when(paymentRepository.findByOrderNumber("100001")).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderId(100001)).thenReturn(Optional.of(payment));
         PaymentRequestsService paymentRequestApi = mock(PaymentRequestsService.class);
         PaymentLink paymentLink = mock(PaymentLink.class);
         when(paymentLink.getStatus()).thenReturn(PaymentLinkStatus.PAID);
@@ -164,9 +164,9 @@ class PaymentServiceImplTest {
     @Test
     void confirmPayment_alreadyPaid_skips() {
         payment.setStatus(PaymentStatus.PAID);
-        when(paymentRepository.findByOrderNumber("NEKI-001")).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderId(1)).thenReturn(Optional.of(payment));
 
-        paymentService.confirmPayment("NEKI-001");
+        paymentService.confirmPayment("1");
 
         verify(payOS, never()).paymentRequests();
         verify(eventPublisher, never()).publishPaymentCompleted(any());
@@ -175,7 +175,7 @@ class PaymentServiceImplTest {
     @Test
     void confirmPayment_payOSError_throws() throws Exception {
         payment.setOrderNumber("100002");
-        when(paymentRepository.findByOrderNumber("100002")).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderId(100002)).thenReturn(Optional.of(payment));
         PaymentRequestsService paymentRequestApi = mock(PaymentRequestsService.class);
         when(paymentRequestApi.get(100002L)).thenThrow(new RuntimeException("PayOS down"));
         when(payOS.paymentRequests()).thenReturn(paymentRequestApi);

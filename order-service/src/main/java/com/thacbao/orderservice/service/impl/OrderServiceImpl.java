@@ -1,5 +1,6 @@
 package com.thacbao.orderservice.service.impl;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.thacbao.common.dto.ProductVariantDTO;
 import com.thacbao.common.dto.response.ApiResponse;
 import com.thacbao.common.enums.OrderStatus;
@@ -9,10 +10,13 @@ import com.thacbao.common.event.OrderStatusUpdatedEvent;
 import com.thacbao.common.exception.InvalidException;
 import com.thacbao.common.exception.NotFoundException;
 import com.thacbao.orderservice.client.ProductServiceClient;
+import com.thacbao.orderservice.client.PaymentServiceClient;
 import com.thacbao.orderservice.client.UserServiceClient;
+import com.thacbao.orderservice.dto.request.CreatePaymentRequest;
 import com.thacbao.orderservice.dto.request.OrderFilterRequest;
 import com.thacbao.orderservice.dto.request.OrderItemRequest;
 import com.thacbao.orderservice.dto.request.OrderRequest;
+import com.thacbao.orderservice.dto.response.PaymentMethodResponse;
 import com.thacbao.orderservice.dto.response.OrderResponse;
 import com.thacbao.orderservice.dto.response.OrderSummaryResponse;
 import com.thacbao.orderservice.model.Cart;
@@ -49,6 +53,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final CartRepository cartRepository;
     private final ProductServiceClient productServiceClient;
+    private final PaymentServiceClient paymentServiceClient;
     private final UserServiceClient userServiceClient;
     private final DiscountService discountService;
     private final DiscountCalculationService discountCalculationService;
@@ -71,28 +76,26 @@ public class OrderServiceImpl implements OrderService {
                         .build())
                 .toList();
 
-        Order order = createOrder(request, items, userId);
+        OrderResponse order = createOrder(request, items, userId);
 
         // Clear cart after order
         cart.getCartItems().clear();
         cartRepository.save(cart);
 
-        return OrderResponse.from(order);
+        return order;
     }
 
     @Override
     public OrderResponse createOrderFromSelectedItems(OrderRequest request, List<OrderItemRequest> items, Integer userId) {
-        Order order = createOrder(request, items, userId);
-        return OrderResponse.from(order);
+        return createOrder(request, items, userId);
     }
 
     @Override
     public OrderResponse buyNow(OrderRequest request, OrderItemRequest item, Integer userId) {
-        Order order = createOrder(request, List.of(item), userId);
-        return OrderResponse.from(order);
+        return createOrder(request, List.of(item), userId);
     }
 
-    private Order createOrder(OrderRequest request, List<OrderItemRequest> items, Integer userId) {
+    private OrderResponse createOrder(OrderRequest request, List<OrderItemRequest> items, Integer userId) {
         // 1. Get user info via Feign
         var userResponse = userServiceClient.getUserById(userId);
         String userEmail = userResponse.getData() != null ? userResponse.getData().getEmail() : "";
@@ -213,7 +216,12 @@ public class OrderServiceImpl implements OrderService {
             // 9. Publish event (now handled by outbox)
             publishOrderCreatedEvent(savedOrder);
     
-            return savedOrder;
+            OrderResponse response = OrderResponse.from(savedOrder);
+            ObjectNode paymentLink = createPayment(savedOrder);
+            if (paymentLink != null) {
+                response.setPaymentLink(paymentLink);
+            }
+            return response;
         } catch (Exception e) {
             log.error("Failed to create order, executing compensating transaction to restore inventory...", e);
             try {
@@ -318,8 +326,7 @@ public class OrderServiceImpl implements OrderService {
                 .paymentMethodId(originalOrder.getPaymentMethodId())
                 .build();
 
-        Order order = createOrder(request, items, userId);
-        return OrderResponse.from(order);
+        return createOrder(request, items, userId);
     }
 
     // === Admin methods ===
@@ -430,6 +437,59 @@ public class OrderServiceImpl implements OrderService {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
         String random = String.format("%04d", new Random().nextInt(10000));
         return "NEKI-" + timestamp + "-" + random;
+    }
+
+    private ObjectNode createPayment(Order order) {
+        CreatePaymentRequest paymentRequest = CreatePaymentRequest.builder()
+                .orderId(order.getId())
+                .orderNumber(order.getOrderNumber())
+                .paymentMethodId(order.getPaymentMethodId())
+                .amount(order.getFinalAmount())
+                .userId(order.getUserId())
+                .userEmail(order.getUserEmail())
+                .userFullName(order.getUserFullName())
+                .phoneDelivery(order.getPhoneDelivery())
+                .shippingAddress(String.join(", ",
+                        order.getAddressDetail(),
+                        order.getWard(),
+                        order.getDistrict(),
+                        order.getProvince()))
+                .items(order.getOrderItems() == null ? List.of() : order.getOrderItems().stream()
+                        .map(item -> CreatePaymentRequest.PaymentItemInfo.builder()
+                                .name(item.getProductName())
+                                .price(item.getUnitPrice().longValue())
+                                .quantity(item.getQuantity())
+                                .build())
+                        .toList())
+                .build();
+
+        ObjectNode paymentLink = null;
+        if (isPayosPaymentMethod(order.getPaymentMethodId())) {
+            paymentLink = paymentServiceClient.createPaymentLink(paymentRequest);
+            if (paymentLink == null
+                    || paymentLink.path("error").asInt(-1) != 0
+                    || paymentLink.path("data").isMissingNode()
+                    || paymentLink.path("data").isNull()) {
+                String message = paymentLink == null
+                        ? "Không tạo được link thanh toán PayOS"
+                        : paymentLink.path("message").asText("Không tạo được link thanh toán PayOS");
+                throw new IllegalStateException(message);
+            }
+        }
+
+        paymentServiceClient.createPayment(paymentRequest);
+        return paymentLink;
+    }
+
+    private boolean isPayosPaymentMethod(Integer paymentMethodId) {
+        ApiResponse<List<PaymentMethodResponse>> response = paymentServiceClient.getPaymentMethods();
+        if (response.getData() == null) {
+            return false;
+        }
+        return response.getData().stream()
+                .filter(method -> paymentMethodId.equals(method.getId()))
+                .anyMatch(method -> method.getName() != null
+                        && method.getName().replaceAll("\\s+", "").equalsIgnoreCase("payos"));
     }
 
     @Override

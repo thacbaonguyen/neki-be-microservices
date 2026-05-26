@@ -6,10 +6,14 @@ import com.thacbao.common.enums.OrderStatus;
 import com.thacbao.common.exception.InvalidException;
 import com.thacbao.common.exception.NotFoundException;
 import com.thacbao.orderservice.client.ProductServiceClient;
+import com.thacbao.orderservice.client.PaymentServiceClient;
 import com.thacbao.orderservice.client.UserServiceClient;
+import com.thacbao.orderservice.dto.request.CreatePaymentRequest;
 import com.thacbao.orderservice.dto.request.OrderFilterRequest;
 import com.thacbao.orderservice.dto.request.OrderItemRequest;
 import com.thacbao.orderservice.dto.request.OrderRequest;
+import com.thacbao.orderservice.dto.response.PaymentMethodResponse;
+import com.thacbao.orderservice.dto.response.PaymentResponse;
 import com.thacbao.orderservice.dto.response.OrderResponse;
 import com.thacbao.orderservice.dto.response.OrderSummaryResponse;
 import com.thacbao.orderservice.model.*;
@@ -42,6 +46,7 @@ class OrderServiceImplTest {
     @Mock private OrderRepository orderRepository;
     @Mock private CartRepository cartRepository;
     @Mock private ProductServiceClient productServiceClient;
+    @Mock private PaymentServiceClient paymentServiceClient;
     @Mock private UserServiceClient userServiceClient;
     @Mock private DiscountService discountService;
     @Mock private DiscountCalculationService discountCalculationService;
@@ -85,6 +90,18 @@ class OrderServiceImplTest {
             if (o.getId() == null) o.setId(1);
             return o;
         });
+        when(paymentServiceClient.getPaymentMethods()).thenReturn(
+                ApiResponse.<List<PaymentMethodResponse>>builder()
+                        .data(List.of(PaymentMethodResponse.builder()
+                                .id(1)
+                                .name("Cash")
+                                .isActive(true)
+                                .build()))
+                        .build());
+        when(paymentServiceClient.createPayment(any(CreatePaymentRequest.class))).thenReturn(
+                ApiResponse.<PaymentResponse>builder()
+                        .data(PaymentResponse.builder().id(1).orderNumber("NEKI-001").build())
+                        .build());
     }
 
     @Test

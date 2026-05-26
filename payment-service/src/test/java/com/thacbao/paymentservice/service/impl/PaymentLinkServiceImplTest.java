@@ -40,6 +40,7 @@ class PaymentLinkServiceImplTest {
     @Test
     void createPaymentLink_success() throws Exception {
         CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setOrderId(12345);
         request.setOrderNumber("12345");
         request.setAmount(BigDecimal.valueOf(100000));
         request.setPhoneDelivery("0123456789");
@@ -66,6 +67,7 @@ class PaymentLinkServiceImplTest {
     @Test
     void createPaymentLink_exception() throws Exception {
         CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setOrderId(12345);
         request.setOrderNumber("12345");
         request.setAmount(BigDecimal.valueOf(100000));
 

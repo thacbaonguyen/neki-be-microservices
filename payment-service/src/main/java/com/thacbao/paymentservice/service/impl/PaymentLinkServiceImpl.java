@@ -48,9 +48,9 @@ public class PaymentLinkServiceImpl implements PaymentLinkService {
             long totalAmount = request.getAmount().longValue();
 
             CreatePaymentLinkRequest paymentLinkRequest = CreatePaymentLinkRequest.builder()
-                    .orderCode(Long.parseLong(request.getOrderNumber()))
+                    .orderCode(request.getOrderId().longValue())
                     .amount(totalAmount)
-                    .description("Order :" + request.getOrderNumber())
+                    .description("NEKI order " + request.getOrderId())
                     .items(paymentLinkItems)
                     .buyerPhone(request.getPhoneDelivery())
                     .buyerAddress(request.getShippingAddress())

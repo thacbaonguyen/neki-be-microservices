@@ -1,0 +1,52 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: product-service
+  datasource:
+    url: "${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/products_db}"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: "${SPRING_DATASOURCE_USERNAME:root}"
+    password: "${SPRING_DATASOURCE_PASSWORD:}"
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+  data:
+    redis:
+      host: "${SPRING_DATA_REDIS_HOST:localhost}"
+      port: "${SPRING_DATA_REDIS_PORT:6379}"
+  elasticsearch:
+    uris: "${SPRING_ELASTICSEARCH_URIS:http://localhost:9200}"
+  rabbitmq:
+    host: "${SPRING_RABBITMQ_HOST:localhost}"
+    port: "${SPRING_RABBITMQ_PORT:5672}"
+    username: "${SPRING_RABBITMQ_USERNAME:guest}"
+    password: "${SPRING_RABBITMQ_PASSWORD:guest}"
+
+eureka:
+  client:
+    service-url:
+      defaultZone: "${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}"
+  instance:
+    prefer-ip-address: true
+
+cloudinary:
+  cloud-name: "${CLOUDINARY_CLOUD_NAME}"
+  api-key: "${CLOUDINARY_API_KEY}"
+  api-secret: "${CLOUDINARY_API_SECRET}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: "${MANAGEMENT_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}"
