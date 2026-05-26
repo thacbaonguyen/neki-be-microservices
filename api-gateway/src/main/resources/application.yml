@@ -1,0 +1,72 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: "${SPRING_DATA_REDIS_HOST:localhost}"
+      port: "${SPRING_DATA_REDIS_PORT:6379}"
+  cloud:
+    gateway:
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/v1/auth/**,/api/v1/users/**,/api/v1/admin/users/**,/oauth2/**,/login/oauth2/**
+          filters:
+            - JwtAuth
+        - id: product-service
+          uri: lb://product-service
+          predicates:
+            - Path=/api/v1/products/**,/api/v1/categories/**,/api/v1/attributes/**,/api/v1/banners/**,/api/v1/catalog/**,/api/v1/search/**,/api/v1/settings/**,/api/v1/admin/products/**
+          filters:
+            - JwtAuth
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/v1/orders/**,/api/v1/cart/**,/api/v1/wishlist/**,/api/v1/reviews/**,/api/v1/shipping/**,/api/v1/discounts/**,/api/v1/admin/orders,/api/v1/admin/orders/**,/api/v1/admin/discounts/**,/api/v1/admin/statistics/**
+          filters:
+            - JwtAuth
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/payment/**,/api/v1/payment-method/**,/api/v1/admin/payment-method/**
+          filters:
+            - JwtAuth
+        - id: recommendation-service
+          uri: lb://recommendation-service
+          predicates:
+            - Path=/api/v1/recommendations/**
+          filters:
+            - JwtAuth
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+
+eureka:
+  client:
+    service-url:
+      defaultZone: "${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}"
+
+jwt:
+  secretKey: "${JWT_SECRETKEY}"
+
+app:
+  cors:
+    allowed-origins: "${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: "${MANAGEMENT_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}"

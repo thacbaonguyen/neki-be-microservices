@@ -43,15 +43,7 @@ neki.iml
 mvnw
 mvnw.cmd
 monolith-backup
-api-gateway/src/main/resources
 docs
-notification-service/src/main/resources
-order-service/src/main/resources
-payment-service/src/main/resources
-product-service/src/main/resources
-recommendation-service/src/main/resources
-service-registry/src/main/resources
-user-service/src/main/resources
 
 api-gateway/target
 notification-service/target

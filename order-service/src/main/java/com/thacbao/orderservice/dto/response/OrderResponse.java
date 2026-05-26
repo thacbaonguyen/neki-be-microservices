@@ -1,6 +1,7 @@
 package com.thacbao.orderservice.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.thacbao.orderservice.model.Order;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,6 +37,7 @@ public class OrderResponse {
     private String phoneDelivery;
     private Integer paymentMethodId;
     private Set<OrderItemResponse> orderItems;
+    private JsonNode paymentLink;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

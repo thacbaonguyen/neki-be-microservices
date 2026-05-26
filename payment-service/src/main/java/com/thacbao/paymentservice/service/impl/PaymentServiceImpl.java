@@ -66,7 +66,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     public void handlePayOSWebhook(WebhookData data) {
         log.info("Handling PayOS Webhook for order: {}", data.getOrderCode());
-        Payment payment = paymentRepository.findByOrderNumber(String.valueOf(data.getOrderCode()))
+        Payment payment = paymentRepository.findByOrderId(Math.toIntExact(data.getOrderCode()))
                 .orElseThrow(() -> new NotFoundException(
                         "Payment for order code " + data.getOrderCode() + " not found"));
 
@@ -104,8 +104,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public void confirmPayment(String orderNumber) {
-        Payment payment = paymentRepository.findByOrderNumber(orderNumber)
-                .orElseThrow(() -> new NotFoundException("Payment for order " + orderNumber + " not found"));
+        Integer orderId = Integer.valueOf(orderNumber);
+        Payment payment = paymentRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new NotFoundException("Payment for order code " + orderNumber + " not found"));
 
         // Idempotent: skip if already paid
         if (payment.getStatus() == PaymentStatus.PAID) {

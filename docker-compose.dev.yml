@@ -112,12 +112,18 @@ services:
       - "8761:8761"
     networks:
       - neki-network
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://localhost:8761/eureka/}
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4318/v1/traces}
+      JAVA_TOOL_OPTIONS: "-Dmanagement.metrics.tags.application=neki-ecommerce -Dmanagement.metrics.distribution.percentiles-histogram.http.server.requests=true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8761/eureka/apps"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8761/eureka/apps || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 60s
 
   api-gateway:
     build:
@@ -130,7 +136,9 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://service-registry:8761/eureka/}
       SPRING_DATA_REDIS_HOST: ${SPRING_DATA_REDIS_HOST:-redis}
       JWT_SECRETKEY: ${JWT_SECRETKEY}
-      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4317}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://castify.io.vn},http://localhost:5173,http://127.0.0.1:5173
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4318/v1/traces}
+      JAVA_TOOL_OPTIONS: "-Dmanagement.metrics.tags.application=neki-ecommerce -Dmanagement.metrics.distribution.percentiles-histogram.http.server.requests=true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -162,7 +170,8 @@ services:
       APP_INIT_ADMIN_PASSWORD: ${APP_INIT_ADMIN_PASSWORD:-admin123}
       APP_INIT_ADMIN_FULLNAME: ${APP_INIT_ADMIN_FULLNAME:-Admin NEKI}
       APP_INIT_ADMIN_PHONENUMBER: ${APP_INIT_ADMIN_PHONENUMBER:-0123456789}
-      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4317}
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4318/v1/traces}
+      JAVA_TOOL_OPTIONS: "-Dmanagement.metrics.tags.application=neki-ecommerce -Dmanagement.metrics.distribution.percentiles-histogram.http.server.requests=true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -197,7 +206,8 @@ services:
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4317}
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4318/v1/traces}
+      JAVA_TOOL_OPTIONS: "-Dmanagement.metrics.tags.application=neki-ecommerce -Dmanagement.metrics.distribution.percentiles-histogram.http.server.requests=true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -231,7 +241,8 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${SPRING_RABBITMQ_PASSWORD:-guest}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://service-registry:8761/eureka/}
       JWT_SECRETKEY: ${JWT_SECRETKEY}
-      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4317}
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4318/v1/traces}
+      JAVA_TOOL_OPTIONS: "-Dmanagement.metrics.tags.application=neki-ecommerce -Dmanagement.metrics.distribution.percentiles-histogram.http.server.requests=true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -267,7 +278,8 @@ services:
       PAYOS_PAYOS_CHECKSUM_KEY: ${PAYOS_PAYOS_CHECKSUM_KEY}
       URL_RETURNURL: ${URL_RETURNURL}
       URL_CANCELURL: ${URL_CANCELURL}
-      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4317}
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4318/v1/traces}
+      JAVA_TOOL_OPTIONS: "-Dmanagement.metrics.tags.application=neki-ecommerce -Dmanagement.metrics.distribution.percentiles-histogram.http.server.requests=true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -296,7 +308,8 @@ services:
       SPRING_RABBITMQ_USERNAME: ${SPRING_RABBITMQ_USERNAME:-guest}
       SPRING_RABBITMQ_PASSWORD: ${SPRING_RABBITMQ_PASSWORD:-guest}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://service-registry:8761/eureka/}
-      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4317}
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4318/v1/traces}
+      JAVA_TOOL_OPTIONS: "-Dmanagement.metrics.tags.application=neki-ecommerce -Dmanagement.metrics.distribution.percentiles-histogram.http.server.requests=true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -329,7 +342,8 @@ services:
       APP_NAME: ${APP_NAME:-NEKI E-Commerce}
       APP_URL: ${APP_URL}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://service-registry:8761/eureka/}
-      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4317}
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4318/v1/traces}
+      JAVA_TOOL_OPTIONS: "-Dmanagement.metrics.tags.application=neki-ecommerce -Dmanagement.metrics.distribution.percentiles-histogram.http.server.requests=true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
