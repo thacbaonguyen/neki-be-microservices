@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: neki
+  labels:
+    project: neki-ecommerce
+    env: staging
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    project: neki-ecommerce
+    purpose: observability

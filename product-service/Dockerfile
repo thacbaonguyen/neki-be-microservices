@@ -13,12 +13,12 @@ COPY recommendation-service/pom.xml ./recommendation-service/pom.xml
 COPY notification-service/pom.xml ./notification-service/pom.xml
 
 COPY common-lib/src ./common-lib/src
-COPY user-service/src ./user-service/src
+COPY product-service/src ./product-service/src
 
-RUN mvn clean package -pl user-service -am -Dmaven.test.skip=true
+RUN mvn clean package -pl product-service -am -Dmaven.test.skip=true
 
 FROM amazoncorretto:21-alpine3.21-jdk
 WORKDIR /app
-COPY --from=build /app/user-service/target/*.jar app.jar
-EXPOSE 8081
+COPY --from=build /app/product-service/target/*.jar app.jar
+EXPOSE 8082
 ENTRYPOINT ["java", "-jar", "app.jar"]
