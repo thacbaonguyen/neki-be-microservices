@@ -1,549 +1,468 @@
-# Neki E-Commerce Microservice
+# Neki E-Commerce Microservices
 
-Hệ thống bán hàng trực tuyến theo kiến trúc **Microservice**, sử dụng **RESTful API** (giao tiếp đồng bộ) và **RabbitMQ** (giao tiếp bất đồng bộ).
+Backend e-commerce theo kiến trúc microservices. Hệ thống dùng Spring Boot cho các domain service chính, FastAPI + Celery cho tác vụ export CSV bất đồng bộ, API Gateway làm cổng vào, RabbitMQ cho event-driven flow, Redis cho cache/job state, và Grafana stack cho observability.
 
-**Tech Stack:** Java 21 · Spring Boot 3.5.9 · Spring Cloud 2025.0.0 · MySQL · PostgreSQL · Redis · RabbitMQ · Elasticsearch · Docker · Kubernetes
+## Công Nghệ
 
----
+| Nhóm | Công nghệ |
+|------|-----------|
+| Backend services | Java 21, Spring Boot, Spring Cloud Gateway, Eureka, OpenFeign |
+| Export service | Python, FastAPI, Celery, Redis |
+| Database | MySQL, PostgreSQL |
+| Search/cache/queue | Elasticsearch, Redis, RabbitMQ |
+| File/email integrations | Cloudinary, Cloudflare R2, SES SMTP, Spring Mail SMTP |
+| Observability | Prometheus, Grafana, Loki, Promtail, Tempo, Micrometer Tracing |
+| Runtime | Docker Compose, Kubernetes manifests |
 
-## Mục lục
+## Sơ Đồ Kiến Trúc
 
-- [Hướng dẫn chạy hệ thống](#hướng-dẫn-chạy-hệ-thống)
-  - [Cách 1: Docker Compose](#cách-1-docker-compose)
-  - [Cách 2: Kubernetes (Minikube)](#cách-2-kubernetes-minikube)
-- [Mô tả bài toán](#1-mô-tả-bài-toán)
-- [Kiến trúc hệ thống](#2-kiến-trúc-hệ-thống)
-- [Mô tả các Microservice](#3-mô-tả-các-microservice)
-- [Luồng Message Queue](#4-luồng-message-queue-rabbitmq)
-- [Giao tiếp đồng bộ (Feign Client)](#5-giao-tiếp-đồng-bộ-feign-client)
-- [Unit Test](#6-unit-test)
-- [Logging (Centralized)](#7-logging-centralized)
-- [Monitoring & Tracing](#8-monitoring--distributed-tracing)
-- [Cấu trúc thư mục](#9-cấu-trúc-thư-mục)
+![Sơ đồ kiến trúc hệ thống](system-achitecture-docs/system-architecture.png)
 
----
+## Môi Trường Chạy Hiện Tại
 
-## Hướng dẫn chạy hệ thống
+Docker Compose dev stack hiện có 15 container:
 
-### Yêu cầu hệ thống
+| Container | Port | Vai trò |
+|-----------|------|---------|
+| `neki-mysql` | `3308:3306` | MySQL cho `users_db`, `products_db`, `orders_db` |
+| `neki-postgres` | `5432` | PostgreSQL cho `payments_db`, `recommendations_db` |
+| `neki-redis` | `6379` | Cache, rate limit, export job state, Celery broker/backend |
+| `neki-rabbitmq` | `5672`, `15672` | Message broker và management UI |
+| `neki-elasticsearch` | `9200` | Product search |
+| `neki-service-registry` | `8761` | Eureka service discovery |
+| `neki-api-gateway` | `8080` | Gateway, JWT auth, routing |
+| `neki-user-service` | `8081` | Auth, user, RBAC |
+| `neki-product-service` | `8082` | Product, catalog, inventory, export internal API |
+| `neki-order-service` | `8083` | Cart, wishlist, order, discount, outbox |
+| `neki-payment-service` | `8084` | PayOS payment |
+| `neki-recommendation-service` | `8085` | Personalized recommendation |
+| `neki-notification-service` | `8086` | Email notification từ RabbitMQ events |
+| `neki-export-service` | `8090` | FastAPI API cho product CSV export |
+| `neki-export-worker` | none | Celery worker để tạo CSV và gửi mail |
 
-| Phần mềm | Phiên bản tối thiểu |
-|-----------|---------------------|
-| Java (JDK) | 21 |
-| Maven | 3.9+ |
-| Docker | 24+ |
-| Docker Compose | v2+ |
-| Git | 2.x |
+## Chạy Local
 
-### Cách 1: Docker Compose
-
-> **Phù hợp cho:** Dev local, demo nhanh, chạy trên 1 máy.
-
-#### Bước 1: Clone project
+### 1. Clone source
 
 ```bash
 git clone git@github.com:thacbaonguyen/neki-be-microservices.git
 cd neki-be-microservices
 ```
 
-#### Bước 2: Chạy infrastructure + application
+### 2. Chuẩn bị `.env`
 
-```bash
-# Chạy toàn bộ (13 containers: 5 infrastructure + 8 application)
-docker compose -f docker-compose.dev.yml up -d --build
+`.env` đã được ignore bởi git. Không commit key thật lên repo.
+
+Các nhóm biến cần có cho full stack:
+
+```env
+JWT_SECRETKEY=...
+
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+
+PAYOS_PAYOS_CLIENT_ID=...
+PAYOS_PAYOS_API_KEY=...
+PAYOS_PAYOS_CHECKSUM_KEY=...
+URL_RETURNURL=...
+URL_CANCELURL=...
+
+SPRING_MAIL_HOST=smtp.gmail.com
+SPRING_MAIL_PORT=587
+SPRING_MAIL_USERNAME=...
+SPRING_MAIL_PASSWORD=...
+APP_URL=http://localhost:5173
+
+INTERNAL_API_TOKEN=...
+
+R2_ACCESS_KEY=...
+R2_SECRET_KEY=...
+R2_ENDPOINT=...
+R2_BUCKET=...
+R2_REGION=auto
+
+SES_SMTP_HOST=...
+SES_SMTP_PORT=587
+SES_SMTP_USER=...
+SES_SMTP_PASS=...
+MAIL_FROM=...
 ```
 
-Lệnh này sẽ tự động:
-- Build 8 service images từ Dockerfile (multi-stage build)
-- Khởi tạo MySQL (3 databases: `users_db`, `products_db`, `orders_db`)
-- Khởi tạo PostgreSQL (2 databases: `payments_db`, `recommendations_db`)
-- Khởi tạo Redis, RabbitMQ, Elasticsearch
-- Khởi chạy 8 Spring Boot services
+Lưu ý:
 
-> ⏳ Lần đầu build mất khoảng 5-10 phút. Các lần sau nhanh hơn nhờ Docker cache.
+- `notification-service` dùng `SPRING_MAIL_*` để gửi mail đăng ký, quên mật khẩu, đơn hàng và thanh toán.
+- `export-service` dùng `SES_SMTP_*` và `MAIL_FROM` để gửi mail export CSV.
+- `INTERNAL_API_TOKEN` phải giống nhau ở `product-service`, `export-service` và `export-worker`.
 
-#### Bước 3: Chạy Monitoring (Prometheus + Grafana)
+### 3. Chạy app stack
+
+```bash
+docker compose --env-file .env -f docker-compose.dev.yml up -d --build
+```
+
+Recreate service sau khi đổi env:
+
+```bash
+# Khi đổi mail env cho notification-service
+docker compose --env-file .env -f docker-compose.dev.yml up -d --force-recreate notification-service
+
+# Khi đổi R2/SES/internal token cho export
+docker compose --env-file .env -f docker-compose.dev.yml up -d --build --force-recreate product-service export-service export-worker api-gateway
+```
+
+### 4. Chạy observability
 
 ```bash
 docker compose -f docker-compose.monitoring.yml up -d
-```
-
-#### Bước 4: Chạy Logging + Tracing (Loki + Promtail + Tempo)
-
-```bash
 docker compose -f docker-compose.logging.yml up -d
 ```
 
-#### Bước 5: Kiểm tra
+URL hay dùng:
+
+| Tool | URL |
+|------|-----|
+| RabbitMQ Management | http://localhost:15672 |
+| Eureka | http://localhost:8761 |
+| Prometheus | http://localhost:9090 |
+| Grafana | http://localhost:3001 |
+| Loki | http://localhost:3100 |
+| Tempo | http://localhost:3200 |
+
+### 5. Kiểm tra nhanh
 
 ```bash
-# Xem tất cả containers
+curl http://localhost:8080/api/v1/products
+curl http://localhost:8090/health
+docker logs neki-export-service --since=5m
+docker logs neki-export-worker --since=5m
+```
+
+## Kiến Trúc Tổng Quan
+
+```text
+Client/Admin Dashboard
+        |
+        v
+API Gateway :8080
+        |
+        +--> user-service :8081 -------------> MySQL users_db
+        +--> product-service :8082 ----------> MySQL products_db + Elasticsearch
+        +--> order-service :8083 ------------> MySQL orders_db
+        +--> payment-service :8084 ----------> PostgreSQL payments_db
+        +--> recommendation-service :8085 ---> PostgreSQL recommendations_db
+        +--> notification-service :8086 -----> SMTP
+        +--> export-service :8090 -----------> Redis/Celery + R2 + SES
+
+RabbitMQ kết nối các event user/order/payment đến notification, product, order và recommendation consumers.
+Redis được dùng cho cache, rate limit và export job state.
+```
+
+## API Gateway Routes
+
+| Path | Target |
+|------|--------|
+| `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/admin/users/**`, `/oauth2/**`, `/login/oauth2/**` | `user-service` |
+| `/api/v1/products/**`, `/api/v1/categories/**`, `/api/v1/attributes/**`, `/api/v1/banners/**`, `/api/v1/catalog/**`, `/api/v1/search/**`, `/api/v1/settings/**`, `/api/v1/admin/products/**` | `product-service` |
+| `/api/v1/admin/exports/**` | `export-service` |
+| `/api/v1/orders/**`, `/api/v1/cart/**`, `/api/v1/wishlist/**`, `/api/v1/reviews/**`, `/api/v1/shipping/**`, `/api/v1/discounts/**`, `/api/v1/admin/orders/**`, `/api/v1/admin/discounts/**`, `/api/v1/admin/statistics/**` | `order-service` |
+| `/payment/**`, `/api/v1/payment-method/**`, `/api/v1/admin/payment-method/**` | `payment-service` |
+| `/api/v1/recommendations/**` | `recommendation-service` |
+
+`JwtAuth` xác thực JWT và forward user context qua các header như `X-User-Id`, `X-User-Email`, `X-User-Roles`.
+
+## Các Service Chính
+
+### Service Registry
+
+- Port: `8761`
+- Eureka server để các Spring services đăng ký và tìm nhau.
+
+### API Gateway
+
+- Port: `8080`
+- Xử lý JWT auth, CORS, routing và các phần liên quan Redis/rate limit.
+
+### User Service
+
+- Port: `8081`
+- Database: MySQL `users_db`
+- Chức năng: signup, login, refresh token, profile, RBAC, password reset.
+- Publish RabbitMQ events cho đăng ký và quên mật khẩu.
+
+### Product Service
+
+- Port: `8082`
+- Database: MySQL `products_db`
+- Tích hợp: Elasticsearch, Cloudinary, RabbitMQ.
+- Chức năng: product/catalog CRUD, inventory, public product listing, internal export API.
+- Internal export endpoints:
+  - `POST /internal/products/export/count`
+  - `POST /internal/products/export/page`
+- Internal endpoints được bảo vệ bằng `X-Internal-Token`.
+
+### Order Service
+
+- Port: `8083`
+- Database: MySQL `orders_db`
+- Chức năng: cart, wishlist, order, shipping, discount, admin statistics.
+- Dùng Feign client để gọi user-service và product-service.
+- Publish order events bằng transactional outbox pattern.
+- Listen `payment.completed` để confirm order.
+
+### Payment Service
+
+- Port: `8084`
+- Database: PostgreSQL `payments_db`
+- Chức năng: tạo PayOS payment link, xử lý webhook, quản lý payment method.
+- Gọi order-service qua Feign.
+- Publish payment events lên RabbitMQ.
+
+### Recommendation Service
+
+- Port: `8085`
+- Database: PostgreSQL `recommendations_db`
+- Chức năng: gợi ý sản phẩm cá nhân hóa và invalidation cache.
+- Listen order events.
+
+### Notification Service
+
+- Port: `8086`
+- Không có database riêng.
+- Dùng Spring Mail qua `SPRING_MAIL_*`.
+- Listen user, order và payment events để gửi email.
+
+### Export Service
+
+- Port: `8090`
+- Runtime: FastAPI.
+- Redis mặc định: `redis://redis:6379/1`.
+- External endpoints:
+  - `POST /api/v1/admin/exports/products`
+  - `GET /api/v1/admin/exports/{jobId}`
+- Lấy email người export từ `X-User-Email`.
+- Chỉ cho phép role `ADMIN`.
+- Gọi Product Service internal API để lấy product count/page.
+- Dùng R2 để lưu CSV và SES SMTP để gửi mail export.
+
+### Export Worker
+
+- Runtime: Celery worker.
+- Command: `celery -A app.celery_app worker -Q exports -l info --concurrency=1`
+- Queue: `exports`
+- Tasks:
+  - `export_csv`
+  - `send_mail`
+- Retry policy: retry 3 lần, mỗi lần cách 5 giây.
+
+## Product CSV Export
+
+API bên ngoài:
+
+```http
+POST /api/v1/admin/exports/products
+```
+
+Request mẫu:
+
+```json
+{
+  "filters": {
+    "categoryId": 1,
+    "brandId": 2,
+    "keyword": "shirt",
+    "isActive": true
+  },
+  "sortBy": "createdAt",
+  "sortDirection": "desc"
+}
+```
+
+Các filter hỗ trợ lấy từ `ProductFilterRequest`: `keyword`, `categoryId`, `subCategoryId`, `brandId`, `collectionId`, `topicId`, `gender`, `minPrice`, `maxPrice`, `colorIds`, `sizeIds`, `isFeatured`, `isNew`, `isOnSale`, `isActive`, `inStock`.
+
+Luồng xử lý:
+
+1. Admin bấm export trong dashboard.
+2. Frontend gọi `POST /api/v1/admin/exports/products`.
+3. API Gateway xác thực JWT và chuyển request đến Export Service.
+4. Export Service kiểm tra `X-User-Email` và `X-User-Roles`.
+5. Export Service gọi Product Service internal count API với `X-Internal-Token`.
+6. Nếu `rowCount <= 100`, Export Service lấy một page nhỏ và trả `text/csv` trực tiếp cho browser download.
+7. Nếu `rowCount > 100`, Export Service tạo `export_job:{jobId}` trong Redis và enqueue Celery task `export_csv`.
+8. `export_csv` chuyển job sang `PROCESSING`, gọi Product Service theo page size mặc định 500 và ghi từng batch vào file CSV tạm.
+9. `export_csv` upload CSV lên R2 theo key `exports/products/YYYY/MM/{jobId}.csv`.
+10. `export_csv` tạo presigned URL, chuyển job sang `DONE`, set `mailStatus=PENDING` và enqueue `send_mail`.
+11. `send_mail` gửi presigned URL đến email của account đang login qua SES SMTP.
+12. Frontend có thể xem trạng thái qua `GET /api/v1/admin/exports/{jobId}`.
+
+CSV dùng encoding UTF-8 có BOM (`utf-8-sig`) và escape các cell bắt đầu bằng `=`, `+`, `-`, `@` để giảm rủi ro CSV formula injection.
+
+Redis job:
+
+```text
+key: export_job:{jobId}
+ttl: 8 ngày
+status: QUEUED | PROCESSING | DONE | FAILED
+mailStatus: PENDING | SENT | FAILED
+```
+
+## RabbitMQ Event Flow
+
+Exchanges:
+
+| Exchange | Type | Mục đích |
+|----------|------|----------|
+| `neki.user.exchange` | topic | User registration và password reset |
+| `neki.order.exchange` | topic | Order lifecycle |
+| `neki.payment.exchange` | topic | Payment lifecycle |
+
+Queues chính:
+
+```text
+User Service
+  -> neki.user.exchange
+     -> notification.user.registered
+     -> notification.user.password
+
+Order Service
+  -> neki.order.exchange
+     -> product.order.created
+     -> product.order.cancelled
+     -> notification.order.created
+     -> notification.order.cancelled
+     -> notification.order.updated
+     -> recommendation.order.created
+
+Payment Service
+  -> neki.payment.exchange
+     -> order.payment.completed
+     -> notification.payment
+```
+
+Order Service dùng transactional outbox:
+
+1. Business transaction lưu order data và một outbox row.
+2. `OutboxEventRelay` đọc các event `PENDING`.
+3. Relay publish event lên RabbitMQ.
+4. Relay chuyển event sang `PROCESSED` sau khi publish thành công.
+
+## Giao Tiếp Đồng Bộ/Internal
+
+| Caller | Callee | Cơ chế | Mục đích |
+|--------|--------|--------|----------|
+| Order Service | User Service | OpenFeign | Validate/lấy thông tin user |
+| Order Service | Product Service | OpenFeign | Product info và inventory |
+| Payment Service | Order Service | OpenFeign | Đồng bộ payment/order status |
+| Recommendation Service | Product Service | OpenFeign | Product details |
+| Recommendation Service | Order Service | OpenFeign | Purchase history |
+| Export Service | Product Service | HTTPX internal API | Product export count/page |
+
+Các Spring Feign clients có fallback/fallback factory ở những nơi đã cấu hình. Export Service internal calls được bảo vệ bằng `X-Internal-Token`.
+
+## Observability
+
+### Metrics
+
+- Spring services expose `/actuator/prometheus`.
+- Prometheus scrape Spring services và Grafana hiển thị dashboard.
+- Trace `/actuator/prometheus` là infrastructure noise khi đọc Tempo, không phải business request.
+
+### Logs
+
+```text
+Docker stdout -> Promtail -> Loki -> Grafana
+```
+
+Spring services dùng logback. Docker profile xuất structured logs có trace ID.
+
+### Tracing
+
+```text
+Client -> API Gateway -> Spring services -> Tempo -> Grafana
+```
+
+Spring services dùng Micrometer Tracing và export trace sang Tempo qua OTLP HTTP endpoint `MANAGEMENT_OTLP_TRACING_ENDPOINT`.
+
+Khi đọc trace:
+
+- Filter theo service/path nghiệp vụ, ví dụ `api-gateway` + `exports`.
+- Bỏ qua `/actuator/prometheus`, `/actuator/health` và Eureka noise.
+- Async work như RabbitMQ consumer, scheduled outbox relay và Celery job có thể xuất hiện thành trace riêng nếu chưa propagate trace context qua async boundary.
+- FastAPI Export Service và Celery worker hiện chưa được instrument OpenTelemetry trong repo.
+
+## Lệnh Hữu Ích
+
+```bash
+# Xem container hiện tại
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
-# Test API qua Gateway
-curl http://localhost:8080/api/v1/products
+# Gateway logs
+docker logs neki-api-gateway --since=10m
+
+# Export logs
+docker logs neki-export-service --since=10m
+docker logs neki-export-worker --since=10m
+
+# Product internal/export logs
+docker logs neki-product-service --since=10m
+
+# Notification mail logs
+docker logs neki-notification-service --since=10m | grep -Ei "mail|smtp|auth|Failed|sent"
+
+# RabbitMQ UI
+open http://localhost:15672
 ```
 
-#### Bảng port mapping
-
-| Service | Port | URL |
-|---------|------|-----|
-| API Gateway | 8080 | http://localhost:8080 |
-| Service Registry (Eureka) | 8761 | http://localhost:8761 |
-| User Service | 8081 | |
-| Product Service | 8082 | |
-| Order Service | 8083 | |
-| Payment Service | 8084 | |
-| Recommendation Service | 8085 | |
-| Notification Service | 8086 | |
-| MySQL | 3308 | |
-| PostgreSQL | 5432 | |
-| Redis | 6379 | |
-| RabbitMQ Management | 15672 | http://localhost:15672 (guest/guest) |
-| Elasticsearch | 9200 | |
-| Prometheus | 9090 | http://localhost:9090 |
-| Grafana | 3001 | http://localhost:3001 (admin/admin123) |
-| Loki | 3100 | |
-| Tempo | 3200 | |
-
-#### Dừng hệ thống
+Validation:
 
 ```bash
-docker compose -f docker-compose.dev.yml down
-docker compose -f docker-compose.monitoring.yml down
-docker compose -f docker-compose.logging.yml down
+# Validate compose config
+docker compose --env-file .env -f docker-compose.dev.yml config
+
+# Chạy Java tests
+./mvnw test
+
+# Kiểm tra syntax Python export-service
+python3 -m compileall -q export-service/app
 ```
 
----
+## Kubernetes
 
-### Cách 2: Kubernetes (Minikube)
-
-> **Phù hợp cho:** Demo production-like, auto-scaling, zero-downtime deployment.
-
-#### Bước 1: Cài đặt công cụ
+Kubernetes files nằm trong `k8s/`, scripts nằm trong `scripts/`.
 
 ```bash
-# Cài Minikube
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube
-
-# Cài kubectl
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install kubectl /usr/local/bin/kubectl
-```
-
-#### Bước 2: Khởi tạo cluster
-
-```bash
-# Cần tối thiểu 8GB RAM, 4 CPUs
 minikube start --memory=8192 --cpus=4 --driver=docker
-
-# Bật Ingress addon
 minikube addons enable ingress
 
-# Kiểm tra
-kubectl get nodes
-```
-
-#### Bước 3: Build & push images lên ghcr.io
-
-```bash
-# Tạo GitHub Personal Access Token:
-# GitHub → Settings → Developer settings → Personal access tokens
-# Permissions cần: write:packages, read:packages
-
-export GITHUB_USERNAME=thacbaonguyen
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
-
-# Build & push 8 images
 ./scripts/k8s-build-push.sh
-```
-
-#### Bước 4: Deploy từng phase
-
-```bash
-# Phase 1: Namespace + Secrets
 ./scripts/k8s-deploy.sh 1
-
-# Phase 2: Infrastructure (MySQL, PostgreSQL, Redis, RabbitMQ, Elasticsearch)
 ./scripts/k8s-deploy.sh 2
-
-# Đợi infrastructure pods sẵn sàng
-kubectl get pods -n neki -w
-# (Ctrl+C khi tất cả pods đều Running)
-
-# Phase 3: Application Services (8 Spring Boot services)
 ./scripts/k8s-deploy.sh 3
-
-# Phase 4: Observability (Prometheus, Grafana, Loki, Tempo, Promtail)
 ./scripts/k8s-deploy.sh 4
-
-# Phase 5: Ingress
 ./scripts/k8s-deploy.sh 5
 ```
 
-#### Bước 5: Truy cập
+## Cấu Trúc Thư Mục
 
-```bash
-# Thêm hostname vào /etc/hosts
-echo "$(minikube ip) neki.local grafana.neki.local" | sudo tee -a /etc/hosts
-
-# Test API
-curl http://neki.local/api/v1/products
-
-# Grafana: http://grafana.neki.local (admin/admin123)
-# Hoặc: http://$(minikube ip):30001
-```
-
-#### Lệnh hữu ích
-
-```bash
-# Xem status toàn bộ
-./scripts/k8s-deploy.sh status
-
-# Xem logs 1 service
-kubectl logs -f deployment/order-service -n neki
-
-# Scale service
-kubectl scale deployment/order-service --replicas=3 -n neki
-
-# Xóa toàn bộ cluster
-./scripts/k8s-deploy.sh delete
-```
-
----
-
-## 1. Mô tả bài toán
-
-Xây dựng hệ thống **bán hàng trực tuyến** (E-Commerce) theo kiến trúc **Microservice**, trong đó:
-
-- Các dịch vụ được **tách rời**, triển khai **độc lập**
-- Giao tiếp **đồng bộ** qua RESTful API (OpenFeign)
-- Giao tiếp **bất đồng bộ** qua Message Queue (RabbitMQ)
-- Mỗi service có **database riêng** (Database per Service pattern)
-- Hỗ trợ **JWT authentication**, **API Gateway**, **Service Discovery**
-
-### Chức năng chính
-
-- Quản lý người dùng (đăng ký, đăng nhập, JWT, phân quyền)
-- Quản lý sản phẩm (CRUD, danh mục, thuộc tính, tìm kiếm Elasticsearch)
-- Quản lý đơn hàng (giỏ hàng, wishlist, đơn hàng, vận chuyển, mã giảm giá)
-- Thanh toán (tích hợp PayOS gateway)
-- Gợi ý sản phẩm (recommendation engine)
-- Thông báo (email tự động qua RabbitMQ)
-
----
-
-## 2. Kiến trúc hệ thống
-
-```
-                          ┌──────────────┐
-                          │   Client     │
-                          └──────┬───────┘
-                                 │
-                          ┌──────▼───────┐
-                          │ API Gateway  │ :8080
-                          │(Spring Cloud)│
-                          └──────┬───────┘
-                                 │
-                    ┌────────────┼────────────┐
-                    │    Eureka Service        │
-                    │    Registry :8761        │
-                    └────────────┬────────────┘
-                                 │
-        ┌────────┬───────┬───────┼───────┬──────────┬──────────┐
-        │        │       │       │       │          │          │
-   ┌────▼───┐┌───▼──┐┌──▼───┐┌──▼───┐┌──▼────┐┌───▼────┐┌───▼────┐
-   │ User   ││Prod- ││Order ││Pay-  ││Recom- ││Notifi- ││       │
-   │Service ││uct   ││Svc   ││ment  ││menda- ││cation  ││       │
-   │ :8081  ││Svc   ││:8083 ││Svc   ││tion   ││Svc     ││       │
-   └───┬────┘│:8082 │└──┬───┘│:8084 ││Svc    ││:8086   ││       │
-       │     └──┬───┘   │    └──┬───┘│:8085  │└───┬────┘│       │
-       │        │       │       │    └──┬────┘    │     │       │
-   ┌───▼────────▼───┐ ┌─▼──┐ ┌─▼──┐ ┌──▼──┐  ┌───▼─────▼──┐    │
-   │  MySQL         │ │Redis│ │Post│ │Redis│  │ RabbitMQ   │    │
-   │users/products/ │ │    │ │gre │ │    │  │            │    │
-   │orders_db       │ │    │ │SQL │ │    │  │            │    │
-   └────────────────┘ └────┘ └────┘ └────┘  └────────────┘    │
-                                                               │
-                                                    ┌──────────▼──┐
-                                                    │Elasticsearch│
-                                                    └─────────────┘
-```
-
-### Giao tiếp giữa các service
-
-| Loại | Công nghệ | Sử dụng cho |
-|------|-----------|-------------|
-| Đồng bộ (Sync) | OpenFeign + Eureka | Gọi API giữa services (kiểm kho, lấy user info) |
-| Bất đồng bộ (Async) | RabbitMQ | Gửi event (đặt hàng, thanh toán, thông báo) |
-
-### Database per Service
-
-| Service | Database | Engine |
-|---------|----------|--------|
-| User Service | `users_db` | MySQL 8 |
-| Product Service | `products_db` | MySQL 8 |
-| Order Service | `orders_db` | MySQL 8 |
-| Payment Service | `payments_db` | PostgreSQL 16 |
-| Recommendation Service | `recommendations_db` | PostgreSQL 16 |
-
----
-
-## 3. Mô tả các Microservice
-
-### 3.1. Service Registry (Eureka)
-- **Port:** 8761
-- **Vai trò:** Service Discovery — tất cả services đăng ký tại đây để tìm thấy nhau
-- **Công nghệ:** Spring Cloud Netflix Eureka Server
-
-### 3.2. API Gateway
-- **Port:** 8080
-- **Vai trò:** Điểm vào duy nhất, routing request đến đúng service, JWT validation, Rate Limiting
-- **Công nghệ:** Spring Cloud Gateway + Redis (rate limiting)
-- **Routes:**
-  - `/api/v1/auth/**`, `/api/v1/users/**` → User Service
-  - `/api/v1/products/**`, `/api/v1/categories/**`, `/api/v1/search/**` → Product Service
-  - `/api/v1/orders/**`, `/api/v1/cart/**`, `/api/v1/wishlist/**` → Order Service
-  - `/payment/**`, `/api/v1/payment-method/**` → Payment Service
-  - `/api/v1/recommendations/**` → Recommendation Service
-
-### 3.3. User Service
-- **Port:** 8081 | **DB:** MySQL (`users_db`)
-- **Chức năng:** Đăng ký, đăng nhập, JWT token, refresh token, quản lý user, phân quyền RBAC
-- **Publish events:** `user.registered`, `user.forgot-password`
-
-### 3.4. Product Service
-- **Port:** 8082 | **DB:** MySQL (`products_db`)
-- **Chức năng:** CRUD sản phẩm, danh mục, thuộc tính (size, color), banner, tìm kiếm Elasticsearch
-- **Listen events:** `order.created` (trừ tồn kho), `order.cancelled` (hoàn tồn kho)
-- **Tích hợp:** Cloudinary (upload ảnh), Elasticsearch (full-text search)
-
-### 3.5. Order Service
-- **Port:** 8083 | **DB:** MySQL (`orders_db`)
-- **Chức năng:** Giỏ hàng, wishlist, đơn hàng, vận chuyển, mã giảm giá, thống kê
-- **Publish events:** `order.created`, `order.cancelled`, `order.updated` (qua Outbox Pattern)
-- **Listen events:** `payment.completed`
-- **Feign clients:** Product Service (kiểm kho), User Service (thông tin user)
-
-### 3.6. Payment Service
-- **Port:** 8084 | **DB:** PostgreSQL (`payments_db`)
-- **Chức năng:** Tạo link thanh toán, xử lý webhook callback, quản lý payment methods
-- **Publish events:** `payment.completed`, `payment.failed`
-- **Feign clients:** Order Service (cập nhật trạng thái đơn)
-- **Tích hợp:** PayOS (cổng thanh toán)
-
-### 3.7. Recommendation Service
-- **Port:** 8085 | **DB:** PostgreSQL (`recommendations_db`)
-- **Chức năng:** Gợi ý sản phẩm dựa trên lịch sử mua hàng
-- **Listen events:** `order.created` (cập nhật hành vi user)
-- **Feign clients:** Product Service, Order Service
-
-### 3.8. Notification Service
-- **Port:** 8086 | **DB:** Không có
-- **Chức năng:** Gửi email thông báo (đăng ký, đặt hàng, thanh toán, quên mật khẩu)
-- **Listen events:** Tất cả events từ User, Order, Payment
-
----
-
-## 4. Luồng Message Queue (RabbitMQ)
-
-### Exchanges
-
-| Exchange | Type | Mô tả |
-|----------|------|-------|
-| `neki.order.exchange` | Topic | Sự kiện liên quan đến đơn hàng |
-| `neki.payment.exchange` | Topic | Sự kiện thanh toán |
-| `neki.user.exchange` | Topic | Sự kiện người dùng |
-
-### Queues & Luồng
-
-```
-User Service ──publish──► neki.user.exchange
-                              ├──► notification.user.registered     → Notification Service (gửi email chào mừng)
-                              └──► notification.user.password       → Notification Service (gửi email reset password)
-
-Order Service ──publish──► neki.order.exchange
-                              ├──► product.order.created            → Product Service (trừ tồn kho)
-                              ├──► product.order.cancelled          → Product Service (hoàn tồn kho)
-                              ├──► notification.order.created       → Notification Service (email xác nhận đơn)
-                              ├──► notification.order.cancelled     → Notification Service (email hủy đơn)
-                              ├──► notification.order.updated       → Notification Service (email cập nhật đơn)
-                              └──► recommendation.order.created     → Recommendation Service (cập nhật gợi ý)
-
-Payment Service ──publish──► neki.payment.exchange
-                              ├──► order.payment.completed          → Order Service (cập nhật trạng thái đơn)
-                              └──► notification.payment             → Notification Service (email thanh toán)
-```
-
-### Outbox Pattern
-
-Order Service sử dụng **Transactional Outbox Pattern** để đảm bảo tính nhất quán giữa database và message queue. Events được lưu vào bảng `outbox_event` trước, sau đó `OutboxEventRelay` (scheduled job) đọc và gửi vào RabbitMQ.
-
----
-
-## 5. Giao tiếp đồng bộ (Feign Client)
-
-| Caller | Callee | Mục đích | Fallback |
-|--------|--------|----------|----------|
-| Order Service | Product Service | Kiểm tra tồn kho | FallbackFactory |
-| Order Service | User Service | Lấy thông tin user | FallbackFactory |
-| Payment Service | Order Service | Cập nhật trạng thái đơn | FallbackFactory |
-| Product Service | Recommendation Service | Lấy gợi ý sản phẩm | Fallback class |
-| Recommendation Service | Product Service | Lấy thông tin sản phẩm | FallbackFactory |
-| Recommendation Service | Order Service | Lấy lịch sử mua | FallbackFactory |
-
-Tất cả Feign clients đều có **Fallback** (Circuit Breaker) để xử lý khi service đích không phản hồi.
-
----
-
-## 6. Unit Test
-
-Hệ thống có **32 test files** phân bổ như sau:
-
-| Service | Test files | Phạm vi test |
-|---------|-----------|--------------|
-| User Service | 7 | UserServiceImpl, TokenServiceImpl, JWT, Security |
-| Order Service | 7 | CartService, OrderService, WishlistService, Outbox, Listener |
-| Product Service | 4 | ProductService, CategoryService, AttributeService, BannerService |
-| Payment Service | 4 | PaymentService, PaymentMethodService, Listener |
-| Notification Service | 4 | EmailService, Listeners |
-| Common Lib | 3 | JwtUtils, GlobalExceptionHandler, AppException |
-| API Gateway | 2 | JwtUtil, JwtAuthGatewayFilterFactory |
-| Recommendation Service | 1 | RecommendationService |
-
-### Chạy test
-
-```bash
-# Chạy toàn bộ tests
-mvn test
-
-# Chạy test 1 service cụ thể
-mvn test -pl user-service
-
-# Chạy test + JaCoCo coverage report
-mvn test jacoco:report
-# Report HTML: <service>/target/site/jacoco/index.html
-```
-
----
-
-## 7. Logging (Centralized)
-
-### Stack: Promtail → Loki → Grafana
-
-```
-Spring Boot Services ──stdout JSON──► Docker ──► Promtail ──push──► Loki ──query──► Grafana
-```
-
-### Structured Logging
-
-- **Local (profile default):** Log dạng text đẹp với màu sắc
-  ```
-  2026-05-17 14:20:15 INFO  [main] [traceId/spanId] c.t.o.s.OrderServiceImpl - Order created
-  ```
-- **Docker (profile docker):** Log dạng JSON structured
-  ```json
-  {"timestamp":"2026-05-17T14:20:15","level":"INFO","message":"Order created","service":"order-service","traceId":"abc123"}
-  ```
-
-### Grafana Dashboard "Neki Logs"
-
-- Log Volume by Service (bar chart)
-- Error Rate by Service (time series)
-- Log Level Distribution (pie chart)
-- WARN + ERROR Count (stat panel)
-- Live Log Stream (real-time)
-
-### Alert Rules
-
-| Rule | Điều kiện | Kênh thông báo |
-|------|-----------|----------------|
-| High Error Rate | >10 ERROR/5min | Email + Telegram |
-| Service Error Spike | >5 ERROR/5min (1 service) | Email + Telegram |
-| No Logs Received | 0 logs/10min từ 1 service | Email + Telegram |
-
-### Config files
-
-| File | Mô tả |
-|------|-------|
-| `monitoring/loki/loki-config.yml` | Loki server: 15-day retention |
-| `monitoring/promtail/promtail-config.yml` | Promtail: Docker socket discovery |
-| `common-lib/src/main/resources/logback-spring.xml` | Logback: text (dev) / JSON (docker) |
-
----
-
-## 8. Monitoring & Distributed Tracing
-
-### Metrics: Prometheus + Grafana
-
-- Mỗi service expose metrics tại `/actuator/prometheus`
-- Prometheus scrape mỗi 15s
-- Grafana dashboard tự động provision
-
-### Distributed Tracing: Micrometer Tracing + Tempo
-
-```
-Request ──► API Gateway ──► Order Service ──► Product Service
-                │                │                  │
-                └── traceId=abc123 xuyên suốt ──────┘
-                                 │
-                          Tempo (lưu trace)
-                                 │
-                          Grafana (hiển thị waterfall)
-```
-
-- **Micrometer Tracing** tự động gắn `traceId` vào mọi HTTP request, Feign call, RabbitMQ message
-- **Tempo** thu thập traces qua OTLP gRPC (port 4317)
-- **Grafana** hiển thị trace waterfall + liên kết trace ↔ log ↔ metric
-
-### 3 Trụ cột Observability
-
-| Trụ cột | Công cụ | Dữ liệu |
-|---------|---------|----------|
-| **Metrics** | Prometheus → Grafana | CPU, RAM, request count, latency |
-| **Logs** | Promtail → Loki → Grafana | Application logs (JSON structured) |
-| **Traces** | Micrometer → Tempo → Grafana | Request tracing xuyên services |
-
----
-
-## 9. Cấu trúc thư mục
-
-```
+```text
 neki-microservice/
-├── common-lib/                      # Shared DTOs, events, exceptions, constants
-├── service-registry/                # Eureka Server
 ├── api-gateway/                     # Spring Cloud Gateway
-├── user-service/                    # User management + JWT auth
-├── product-service/                 # Product CRUD + Elasticsearch
-├── order-service/                   # Cart, Order, Wishlist, Discount
-├── payment-service/                 # PayOS integration
-├── recommendation-service/          # Product recommendations
-├── notification-service/            # Email notifications
-├── docker/                          # DB init scripts
-│   ├── mysql-init.sql
-│   └── postgres-init.sql
-├── monitoring/                      # Observability configs
-│   ├── loki/
-│   ├── promtail/
-│   ├── tempo/
-│   ├── prometheus.yml
-│   └── grafana/
-│       ├── dashboards/
-│       └── provisioning/
+├── common-lib/                      # DTO, event, exception, constant dùng chung
+├── export-service/                  # FastAPI + Celery cho product CSV export
+├── notification-service/            # Consumer gửi email từ RabbitMQ events
+├── order-service/                   # Cart, wishlist, order, discount, outbox
+├── payment-service/                 # Tích hợp thanh toán PayOS
+├── product-service/                 # Product/catalog/inventory/search
+├── recommendation-service/          # Gợi ý sản phẩm
+├── service-registry/                # Eureka server
+├── user-service/                    # Auth, users, RBAC
+├── docker/                          # MySQL/Postgres init scripts
 ├── k8s/                             # Kubernetes manifests
-│   ├── namespace.yml
-│   ├── secrets/
-│   ├── infrastructure/
-│   ├── apps/
-│   ├── monitoring/
-│   └── ingress.yml
-├── scripts/                         # Automation scripts
-│   ├── k8s-build-push.sh
-│   └── k8s-deploy.sh
-├── docker-compose.dev.yml           # Full stack (infrastructure + apps)
+├── monitoring/                      # Prometheus, Grafana, Loki, Tempo configs
+├── scripts/                         # K8s helper scripts
+├── system-achitecture-docs/         # Ảnh kiến trúc hệ thống
+├── docker-compose.dev.yml           # Stack local đầy đủ
 ├── docker-compose.monitoring.yml    # Prometheus + Grafana
 ├── docker-compose.logging.yml       # Loki + Promtail + Tempo
-├── docker-compose.nobuild.yml       # Infrastructure only (dev local)
-└── pom.xml                          # Root Maven POM (multi-module)
+└── pom.xml                          # Root Maven multi-module POM
 ```
