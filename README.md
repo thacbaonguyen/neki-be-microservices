@@ -16,15 +16,7 @@ Backend e-commerce theo kiến trúc microservices. Hệ thống dùng Spring Bo
 
 ## Sơ Đồ Kiến Trúc
 
-![System architecture](system-achitecture-docs/system-architecture.png)
-
-Ghi chú về sơ đồ:
-
-- Sơ đồ mô tả kiến trúc tổng quan, không phải mapping 1:1 của local Docker Compose.
-- Nginx/GCP thể hiện hướng triển khai production hoặc reverse proxy phía trước, còn local dev hiện đi trực tiếp qua API Gateway `:8080`.
-- Sơ đồ đã thể hiện đúng các mảnh chính hiện tại: API Gateway, các domain service, Export Service, Celery worker, RabbitMQ, Eureka, Redis, Elasticsearch, MySQL, PostgreSQL, R2, SES, PayOS và observability stack.
-- Observability trong repo có thêm Tempo cho distributed tracing; ảnh đang thể hiện Grafana, Prometheus, Loki và Promtail nhưng chưa vẽ Tempo.
-- Nhãn `RCA Service` trong ảnh đang tương ứng với recommendation/rcm service.
+![Sơ đồ kiến trúc hệ thống](system-achitecture-docs/system-architecture.png)
 
 ## Môi Trường Chạy Hiện Tại
 
@@ -47,8 +39,6 @@ Docker Compose dev stack hiện có 15 container:
 | `neki-notification-service` | `8086` | Email notification từ RabbitMQ events |
 | `neki-export-service` | `8090` | FastAPI API cho product CSV export |
 | `neki-export-worker` | none | Celery worker để tạo CSV và gửi mail |
-
-Kubernetes manifests hiện mới cover các Spring services và infrastructure. Docker Compose là cách chạy đầy đủ nhất cho local hiện tại vì đã có `export-service` và `export-worker`.
 
 ## Chạy Local
 
@@ -451,8 +441,6 @@ minikube addons enable ingress
 ./scripts/k8s-deploy.sh 4
 ./scripts/k8s-deploy.sh 5
 ```
-
-Giới hạn hiện tại: Kubernetes manifests và scripts chưa deploy `export-service` và `export-worker`. Dùng Docker Compose nếu cần chạy đầy đủ stack hiện tại ở local.
 
 ## Cấu Trúc Thư Mục
 
