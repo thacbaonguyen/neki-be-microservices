@@ -1,10 +1,13 @@
 package com.thacbao.productservice.controller;
 
 import com.thacbao.common.dto.response.ApiResponse;
+import com.thacbao.productservice.dto.request.ProductExportRequest;
+import com.thacbao.productservice.dto.response.ProductExportCountResponse;
 import com.thacbao.productservice.dto.response.ProductDetailResponse;
 import com.thacbao.productservice.dto.response.ProductVariantResponse;
 import com.thacbao.productservice.service.ProductService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -92,6 +95,26 @@ public class InternalProductController {
                 .map(com.thacbao.productservice.dto.response.ProductListResponse::from)
                 .collect(java.util.stream.Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    @PostMapping("/export/count")
+    public ResponseEntity<ApiResponse<ProductExportCountResponse>> countProductsForExport(
+            @RequestBody(required = false) ProductExportRequest request) {
+        ProductExportRequest resolved = request != null ? request : new ProductExportRequest();
+        long rowCount = productService.countProductsForExport(resolved.resolvedFilters());
+        return ResponseEntity.ok(ApiResponse.success(ProductExportCountResponse.builder()
+                .rowCount(rowCount)
+                .build()));
+    }
+
+    @PostMapping("/export/page")
+    public ResponseEntity<ApiResponse<org.springframework.data.domain.Page<com.thacbao.productservice.dto.response.ProductExportRowResponse>>> getProductsForExport(
+            @RequestBody(required = false) ProductExportRequest request) {
+        ProductExportRequest resolved = request != null ? request : new ProductExportRequest();
+        var page = productService.getProductsForExport(
+                resolved.resolvedFilters(),
+                PageRequest.of(resolved.resolvedPage(), resolved.resolvedSize()));
+        return ResponseEntity.ok(ApiResponse.success(page));
     }
 
 }

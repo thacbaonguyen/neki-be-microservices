@@ -33,6 +33,11 @@ build/
 ### VS Code ###
 .vscode/
 
+### Python ###
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
 /src/main/resources
 .mvn
 .gitattributes

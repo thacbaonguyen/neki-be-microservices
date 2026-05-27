@@ -23,6 +23,12 @@ spring:
             - Path=/api/v1/products/**,/api/v1/categories/**,/api/v1/attributes/**,/api/v1/banners/**,/api/v1/catalog/**,/api/v1/search/**,/api/v1/settings/**,/api/v1/admin/products/**
           filters:
             - JwtAuth
+        - id: export-service
+          uri: http://export-service:8090
+          predicates:
+            - Path=/api/v1/admin/exports/**
+          filters:
+            - JwtAuth
         - id: order-service
           uri: lb://order-service
           predicates:

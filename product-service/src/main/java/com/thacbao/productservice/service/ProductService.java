@@ -39,6 +39,8 @@ public interface ProductService {
     ProductDetailResponse getProductById(Integer id);
     ProductDetailResponse getProductBySlug(String slug);
     Page<ProductListResponse> getProducts(ProductFilterRequest filter, Pageable pageable);
+    long countProductsForExport(ProductFilterRequest filter);
+    Page<ProductExportRowResponse> getProductsForExport(ProductFilterRequest filter, Pageable pageable);
     Page<ProductListResponse> getFeaturedProducts(Pageable pageable);
     Page<ProductListResponse> getNewProducts(Pageable pageable);
     Page<ProductListResponse> getOnSaleProducts(Pageable pageable);
