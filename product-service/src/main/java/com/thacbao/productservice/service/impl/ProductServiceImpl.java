@@ -383,6 +383,24 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    public long countProductsForExport(ProductFilterRequest filter) {
+        filter.setIncludeInactive(true);
+        return productRepository.filterProducts(filter, PageRequest.of(0, 1)).getTotalElements();
+    }
+
+    @Override
+    public Page<ProductExportRowResponse> getProductsForExport(ProductFilterRequest filter, Pageable pageable) {
+        filter.setIncludeInactive(true);
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdAt");
+        if (filter.getSortBy() != null) {
+            Sort.Direction dir = "asc".equalsIgnoreCase(filter.getSortDirection()) ? Sort.Direction.ASC : Sort.Direction.DESC;
+            sort = Sort.by(dir, filter.getSortBy());
+        }
+        Pageable sortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
+        return productRepository.filterProducts(filter, sortedPageable).map(ProductExportRowResponse::from);
+    }
+
+    @Override
     public Page<ProductListResponse> getFeaturedProducts(Pageable pageable) {
         return productRepository.findByIsFeaturedTrueAndIsActiveTrue(pageable).map(ProductListResponse::from);
     }

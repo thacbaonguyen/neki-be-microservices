@@ -39,6 +39,10 @@ cloudinary:
   api-key: "${CLOUDINARY_API_KEY}"
   api-secret: "${CLOUDINARY_API_SECRET}"
 
+app:
+  internal:
+    token: "${INTERNAL_API_TOKEN}"
+
 management:
   endpoints:
     web:

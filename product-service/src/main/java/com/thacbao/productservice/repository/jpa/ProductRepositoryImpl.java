@@ -41,8 +41,9 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
     public Page<Product> filterProducts(ProductFilterRequest filter, Pageable pageable) {
         BooleanBuilder builder = new BooleanBuilder();
 
-        // Only filter by isActive when not requesting for admin (includeInactive)
-        if (filter.getIncludeInactive() == null || !filter.getIncludeInactive()) {
+        if (filter.getIsActive() != null) {
+            builder.and(product.isActive.eq(filter.getIsActive()));
+        } else if (filter.getIncludeInactive() == null || !filter.getIncludeInactive()) {
             builder.and(product.isActive.isTrue());
         }
 

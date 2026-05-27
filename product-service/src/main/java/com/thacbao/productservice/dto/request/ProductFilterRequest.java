@@ -35,6 +35,7 @@ public class ProductFilterRequest {
     private Boolean isFeatured;
     private Boolean isNew;
     private Boolean isOnSale;
+    private Boolean isActive;
     private Boolean inStock;
 
     private String keyword;

@@ -148,6 +148,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      export-service:
+        condition: service_started
 
   user-service:
     build:
@@ -206,6 +208,7 @@ services:
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
       MANAGEMENT_OTLP_TRACING_ENDPOINT: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:-http://host.docker.internal:4318/v1/traces}
       JAVA_TOOL_OPTIONS: "-Dmanagement.metrics.tags.application=neki-ecommerce -Dmanagement.metrics.distribution.percentiles-histogram.http.server.requests=true"
     extra_hosts:
@@ -291,6 +294,76 @@ services:
         condition: service_healthy
       service-registry:
         condition: service_healthy
+
+  export-service:
+    build:
+      context: ./export-service
+      dockerfile: Dockerfile
+    container_name: neki-export-service
+    ports:
+      - "8090:8090"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8090
+    environment:
+      REDIS_URL: ${EXPORT_REDIS_URL:-redis://redis:6379/1}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL:-http://product-service:8082}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      R2_ACCESS_KEY: ${R2_ACCESS_KEY}
+      R2_SECRET_KEY: ${R2_SECRET_KEY}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_PRESIGN_EXPIRES_SECONDS: ${R2_PRESIGN_EXPIRES_SECONDS:-604800}
+      SES_SMTP_HOST: ${SES_SMTP_HOST}
+      SES_SMTP_PORT: ${SES_SMTP_PORT:-587}
+      SES_SMTP_USER: ${SES_SMTP_USER}
+      SES_SMTP_PASS: ${SES_SMTP_PASS}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      MAIL_FROM: ${MAIL_FROM}
+      APP_NAME: ${APP_NAME:-NEKI E-Commerce}
+      EXPORT_JOB_TTL_SECONDS: ${EXPORT_JOB_TTL_SECONDS:-691200}
+      PRODUCT_EXPORT_PAGE_SIZE: ${PRODUCT_EXPORT_PAGE_SIZE:-500}
+      DIRECT_EXPORT_MAX_ROWS: ${DIRECT_EXPORT_MAX_ROWS:-100}
+    networks:
+      - neki-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+
+  export-worker:
+    build:
+      context: ./export-service
+      dockerfile: Dockerfile
+    container_name: neki-export-worker
+    command: celery -A app.celery_app worker -Q exports -l info --concurrency=1
+    environment:
+      REDIS_URL: ${EXPORT_REDIS_URL:-redis://redis:6379/1}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL:-http://product-service:8082}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      R2_ACCESS_KEY: ${R2_ACCESS_KEY}
+      R2_SECRET_KEY: ${R2_SECRET_KEY}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_PRESIGN_EXPIRES_SECONDS: ${R2_PRESIGN_EXPIRES_SECONDS:-604800}
+      SES_SMTP_HOST: ${SES_SMTP_HOST}
+      SES_SMTP_PORT: ${SES_SMTP_PORT:-587}
+      SES_SMTP_USER: ${SES_SMTP_USER}
+      SES_SMTP_PASS: ${SES_SMTP_PASS}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      MAIL_FROM: ${MAIL_FROM}
+      APP_NAME: ${APP_NAME:-NEKI E-Commerce}
+      EXPORT_JOB_TTL_SECONDS: ${EXPORT_JOB_TTL_SECONDS:-691200}
+      PRODUCT_EXPORT_PAGE_SIZE: ${PRODUCT_EXPORT_PAGE_SIZE:-500}
+      DIRECT_EXPORT_MAX_ROWS: ${DIRECT_EXPORT_MAX_ROWS:-100}
+    networks:
+      - neki-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      product-service:
+        condition: service_started
 
   recommendation-service:
     build:

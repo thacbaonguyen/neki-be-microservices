@@ -11,11 +11,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -207,6 +209,38 @@ class ProductServiceImplTest {
         Page<ProductListResponse> result = productService.getProducts(new ProductFilterRequest(), PageRequest.of(0, 10));
 
         assertEquals(1, result.getTotalElements());
+    }
+
+    @Test
+    void countProductsForExport_includesInactive() {
+        Page<Product> page = new PageImpl<>(List.of(product), PageRequest.of(0, 1), 25);
+        when(productRepository.filterProducts(any(), any())).thenReturn(page);
+
+        long result = productService.countProductsForExport(new ProductFilterRequest());
+
+        ArgumentCaptor<ProductFilterRequest> filterCaptor = ArgumentCaptor.forClass(ProductFilterRequest.class);
+        verify(productRepository).filterProducts(filterCaptor.capture(), any());
+        assertEquals(25, result);
+        assertTrue(filterCaptor.getValue().getIncludeInactive());
+    }
+
+    @Test
+    void getProductsForExport_returnsExportRowsWithSort() {
+        Page<Product> page = new PageImpl<>(List.of(product));
+        when(productRepository.filterProducts(any(), any())).thenReturn(page);
+
+        ProductFilterRequest filter = new ProductFilterRequest();
+        filter.setSortBy("name");
+        filter.setSortDirection("asc");
+        Page<ProductExportRowResponse> result = productService.getProductsForExport(filter, PageRequest.of(0, 10));
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(productRepository).filterProducts(any(), pageableCaptor.capture());
+        Sort.Order sortOrder = pageableCaptor.getValue().getSort().getOrderFor("name");
+        assertNotNull(sortOrder);
+        assertTrue(sortOrder.isAscending());
+        assertEquals(1, result.getTotalElements());
+        assertEquals("Test Product", result.getContent().get(0).getName());
     }
 
     @Test
